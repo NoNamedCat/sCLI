@@ -28,7 +28,7 @@ void sCLI::loop() {
       // Check for end of line character
       if (c == '\r' || c == '\n') {
         stream->println(); // Print a new line
-        processLine(stream, _buffer); // Process the command line
+        processLine(_buffer); // Process the command line
         printPrompt(stream); // Print the command prompt
       }
       // Check for backspace or delete character
@@ -62,8 +62,8 @@ void sCLI::processLine(const char* line) {
       return;
     }
   }
-  stream->print("Unknown command: "); // Print an error message for unknown commands
-  stream->println(_buffer);
+  _serials[0]->print("Unknown command: "); // Print an error message for unknown commands
+  _serials[0]->println(_buffer);
 }
 
 void sCLI::printPrompt(Stream* stream) {
