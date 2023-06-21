@@ -2,31 +2,38 @@
 #define SCLI_H
 
 #include <Arduino.h>
-#include <vector>
+#include <Stream.h>
 
-const int CLI_BUFFER_SIZE = 64;
+#define MAX_COMMAND_LENGTH 64
+#define MAX_PARAMETERS 5
+#define MAX_PORTS 5
+#define MAX_COMMANDS 10
 
-typedef void (*CommandFunction)(char*);
+typedef void (*CommandFunction)(Stream& stream, const String parameters[], byte numParams);
 
 class sCLI {
 public:
   sCLI();
-  ~sCLI();
-  void addSerial(Stream& stream);
-  void addCommand(const char* command, CommandFunction function);
+  void addCommand(const String& command, CommandFunction function, byte numParams);
+  void addPort(Stream& stream);
+  void print(const String& message);
   void loop();
-  void print(const char* message);
 
 private:
-  void processLine(const char* line);
-  void printPrompt(Stream* stream);
+  Stream* ports[MAX_PORTS];
+  byte numPorts;
+  String inputBuffer;
+  byte inputCount;
+  CommandFunction commands[MAX_COMMANDS];
+  String commandNames[MAX_COMMANDS];
+  byte numCommands;
+  String parameters[MAX_PARAMETERS];
+  byte numParams;
 
-  std::vector<Stream*> _serials;
-  const char* _commandStrings[CLI_BUFFER_SIZE];
-  CommandFunction _commands[CLI_BUFFER_SIZE];
-  char _buffer[CLI_BUFFER_SIZE];
-  int _position;
-  int _commandCount;
+  void processCommand();
+  void clearInput();
+  void printPrompt();
 };
 
 #endif
+
