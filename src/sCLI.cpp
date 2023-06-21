@@ -1,79 +1,92 @@
 #include "sCLI.h"
 
-sCLI::sCLI() : _position(0), _commandCount(0) {
-  memset(_buffer, 0, sizeof(_buffer)); // Clear the input buffer
+
+
+sCLI::sCLI() {
+  numPorts = 0;
+  inputCount = 0;
+  numCommands = 0;
+  numParams = 0;
 }
 
-sCLI::~sCLI() {
-  _serials.clear(); // Clear the vector of serial communication objects
+void sCLI::addCommand(const String& command, CommandFunction function, byte numParams) {
+  if (numCommands < MAX_COMMANDS) {
+    commandNames[numCommands] = command;
+    commands[numCommands] = function;
+    numCommands++;
+  }
 }
 
-void sCLI::addSerial(Stream& stream) {
-  _serials.push_back(&stream); // Add a serial communication object to the vector
+void sCLI::addPort(Stream& stream) {
+  if (numPorts < MAX_PORTS) {
+    ports[numPorts] = &stream;
+    numPorts++;
+  }
 }
 
-void sCLI::addCommand(const char* command, CommandFunction function) {
-  if (_commandCount < CLI_BUFFER_SIZE) {
-    _commandStrings[_commandCount] = command; // Add the command string to the array
-    _commands[_commandCount] = function; // Add the command function to the array
-    _commandCount++; // Increment the number of registered commands
+void sCLI::print(const String& message) {
+  for (byte i = 0; i < numPorts; i++) {
+    ports[i]->print(message);
   }
 }
 
 void sCLI::loop() {
-  for (auto& stream : _serials) {
-    while (stream->available()) {
-      char c = stream->read(); // Read a character from the serial input
-
-      // Check for end of line character
-      if (c == '\r' || c == '\n') {
-        stream->println(); // Print a new line
-        processLine(_buffer); // Process the command line
-        printPrompt(stream); // Print the command prompt
+  while (ports[0]->available()) {
+    char c = ports[0]->read();
+    if (c == '\r' || c == '\n') {
+      if (inputCount > 0) {
+        processCommand();
+        clearInput();
       }
-      // Check for backspace or delete character
-      else if (c == '\b' || c == 0x7f) {
-        if (_position > 0) {
-          _position--; // Decrement the current position in the input buffer
-          stream->print('\b'); // Move the cursor back
-          stream->print(' '); // Clear the character
-          stream->print('\b'); // Move the cursor back again
+      printPrompt();
+    } else if (c == '\b') {
+      if (inputCount > 0) {
+        inputBuffer.remove(inputCount - 1);
+        inputCount--;
+        print("\b \b");
+      }
+    } else if (inputCount < MAX_COMMAND_LENGTH) {
+      inputBuffer += c;
+      inputCount++;
+      print(String(c));
+    }
+  }
+}
+
+void sCLI::processCommand() {
+  String command;
+  byte paramStart = 0;
+  byte paramEnd = inputBuffer.indexOf(' ');
+  if (paramEnd == -1) {
+    command = inputBuffer;
+  } else {
+    command = inputBuffer.substring(0, paramEnd);
+    paramStart = paramEnd + 1;
+  }
+
+  for (byte i = 0; i < numCommands; i++) {
+    if (command.equals(commandNames[i])) {
+      numParams = 0;
+      byte paramIndex = 0;
+      while (paramStart < inputCount && numParams < MAX_PARAMETERS) {
+        paramEnd = inputBuffer.indexOf(' ', paramStart);
+        if (paramEnd == -1) {
+          paramEnd = inputCount;
         }
+        parameters[paramIndex] = inputBuffer.substring(paramStart, paramEnd);
+        paramIndex++;
+        paramStart = paramEnd + 1;
+        numParams++;
       }
-      // Store the character in the input buffer
-      else if (_position < CLI_BUFFER_SIZE - 1) {
-        _buffer[_position] = c;
-        _position++;
-        stream->write(c); // Echo the character back to the serial output
+      for (byte j = 0; j < numPorts; j++) {
+        commands[i](*ports[j], parameters, numParams);
       }
-    }
-  }
-}
-
-void sCLI::processLine(const char* line) {
-  _buffer[_position] = 0; // Null-terminate the input buffer
-  for (int i = 0; i < _commandCount; i++) {
-    if (strcmp(_buffer, _commandStrings[i]) == 0) {
-      _commands[i](""); // Call the command function with an empty argument
-      return;
-    }
-    if (strncmp(_buffer, _commandStrings[i], strlen(_commandStrings[i])) == 0) {
-      _commands[i](_buffer + strlen(_commandStrings[i]) + 1); // Call the command function with the argument after the command string
+      clearInput();
       return;
     }
   }
-  _serials[0]->print("Unknown command: "); // Print an error message for unknown commands
-  _serials[0]->println(_buffer);
-}
-
-void sCLI::printPrompt(Stream* stream) {
-  stream->print("> "); // Print the command prompt
-  _position = 0; // Reset the current position in the input buffer
-  memset(_buffer, 0, sizeof(_buffer)); // Clear the input buffer
-}
-
-void sCLI::print(const char* message) {
-  for (auto& stream : _serials) {
-    stream->print(message); // Print the message to all serial communication objects
-  }
+  print("Command not found: ");
+  print(command);
+  print("\n");
+  clearInput();
 }
