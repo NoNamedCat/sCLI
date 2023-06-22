@@ -1,92 +1,156 @@
 #include "sCLI.h"
 
-
-
 sCLI::sCLI() {
-  numPorts = 0;
-  inputCount = 0;
-  numCommands = 0;
-  numParams = 0;
+  prompt = "> ";
+  commandCount = 0;
+  streamCount = 0;
+  charCount = 0;
 }
 
-void sCLI::addCommand(const String& command, CommandFunction function, byte numParams) {
-  if (numCommands < MAX_COMMANDS) {
-    commandNames[numCommands] = command;
-    commands[numCommands] = function;
-    numCommands++;
+void sCLI::addCommand(const char* command, CommandFunction function) {
+  if (commandCount < MAX_COMMAND_LENGTH) {
+    commandNames[commandCount] = command;
+    commandFunctions[commandCount] = function;
+    commandCount++;
   }
 }
 
-void sCLI::addPort(Stream& stream) {
-  if (numPorts < MAX_PORTS) {
-    ports[numPorts] = &stream;
-    numPorts++;
+void sCLI::addStream(Stream& stream) {
+  if (streamCount < MAX_COMMAND_LENGTH) {
+    streams[streamCount] = &stream;
+    streamCount++;
   }
 }
 
-void sCLI::print(const String& message) {
-  for (byte i = 0; i < numPorts; i++) {
-    ports[i]->print(message);
-  }
+void sCLI::setPrompt(const char* newPrompt) {
+  prompt = newPrompt;
+  printPrompt();
 }
 
 void sCLI::loop() {
-  while (ports[0]->available()) {
-    char c = ports[0]->read();
-    if (c == '\r' || c == '\n') {
-      if (inputCount > 0) {
-        processCommand();
-        clearInput();
+    processInput();
+}
+
+void sCLI::executeCommand() {
+  size_t commandLength = strlen(commandBuffer);
+
+  // Verificar si el comando está vacío o consiste solo en espacios en blanco
+  bool isWhitespaceOnly = true;
+  for (size_t i = 0; i < commandLength; i++) {
+    if (!isspace(commandBuffer[i])) {
+      isWhitespaceOnly = false;
+      break;
+    }
+  }
+
+  if (commandLength == 0 || isWhitespaceOnly) {
+    // El comando está vacío o consiste solo en espacios en blanco, ignorarlo
+    memset(commandBuffer, 0, sizeof(commandBuffer));
+    charCount = 0;
+    return;
+  }
+
+  char* tokens[MAX_PARAM_COUNT];
+  uint8_t tokenCount = 0;
+
+  
+
+  tokenizeCommand(commandBuffer, tokens, tokenCount);
+
+  for (uint8_t i = 0; i < commandCount; i++) {
+    if (strcmp(tokens[0], commandNames[i]) == 0) {
+      commandFunctions[i]((const char**)tokens, tokenCount);
+      break;
+    }
+  }
+
+  // Clear command buffer
+  memset(commandBuffer, 0, sizeof(commandBuffer));
+  charCount = 0;
+}
+
+
+void sCLI::processInput() {
+  for (uint8_t i = 0; i < streamCount; i++) {
+    Stream* stream = streams[i];
+    while (stream->available()) {
+      char input = stream->read();
+
+      if (charCount < MAX_COMMAND_LENGTH) {
+        if (input == '\r' || input == '\n') {
+          if (charCount > 0) {
+            println("");
+            executeCommand();
+            printPrompt();
+          }
+        } else if (input == '\b' || input == 127) {  // Backspace or Delete key
+          if (charCount > 0) {
+            charCount--;
+            for (uint8_t j = 0; j < streamCount; j++) {
+              if (streams[j] != nullptr) {
+                streams[j]->write("\b \b");
+              }
+            }
+          }
+        } else {
+          commandBuffer[charCount] = input;
+          charCount++;
+          for (uint8_t j = 0; j < streamCount; j++) {
+            if (streams[j] != nullptr) {
+              streams[j]->write(input);
+            }
+          }
+        }
       }
-      printPrompt();
-    } else if (c == '\b') {
-      if (inputCount > 0) {
-        inputBuffer.remove(inputCount - 1);
-        inputCount--;
-        print("\b \b");
-      }
-    } else if (inputCount < MAX_COMMAND_LENGTH) {
-      inputBuffer += c;
-      inputCount++;
-      print(String(c));
     }
   }
 }
 
-void sCLI::processCommand() {
-  String command;
-  byte paramStart = 0;
-  byte paramEnd = inputBuffer.indexOf(' ');
-  if (paramEnd == -1) {
-    command = inputBuffer;
-  } else {
-    command = inputBuffer.substring(0, paramEnd);
-    paramStart = paramEnd + 1;
-  }
+void sCLI::printPrompt() {
+  print(prompt);
+}
 
-  for (byte i = 0; i < numCommands; i++) {
-    if (command.equals(commandNames[i])) {
-      numParams = 0;
-      byte paramIndex = 0;
-      while (paramStart < inputCount && numParams < MAX_PARAMETERS) {
-        paramEnd = inputBuffer.indexOf(' ', paramStart);
-        if (paramEnd == -1) {
-          paramEnd = inputCount;
-        }
-        parameters[paramIndex] = inputBuffer.substring(paramStart, paramEnd);
-        paramIndex++;
-        paramStart = paramEnd + 1;
-        numParams++;
-      }
-      for (byte j = 0; j < numPorts; j++) {
-        commands[i](*ports[j], parameters, numParams);
-      }
-      clearInput();
-      return;
+void sCLI::print(const char* message) {
+  for (uint8_t i = 0; i < streamCount; i++) {
+    if (streams[i] != nullptr) {
+      streams[i]->print(message);
+      streams[i]->flush();   // Asegurarse de que los datos se envíen correctamente
     }
   }
-  print("Command not found: ");
-  print(command);
-  print("\n");
-  clearInput();
+}
+
+void sCLI::println(const char* message) {
+  for (uint8_t i = 0; i < streamCount; i++) {
+    if (streams[i] != nullptr) {
+      streams[i]->print(message);
+      streams[i]->println(); // Agregar una nueva línea al final del mensaje
+      streams[i]->flush();   // Asegurarse de que los datos se envíen correctamente
+    }
+  }
+}
+
+void sCLI::printNumber(int number) {
+  char buffer[32];
+  snprintf(buffer, sizeof(buffer), "%d", number);
+  print(buffer);
+}
+
+void sCLI::printNumber(float number, uint8_t decimalPlaces) {
+  char buffer[32];
+  snprintf(buffer, sizeof(buffer), "%.*f", decimalPlaces, number);
+  print(buffer);
+}
+
+void sCLI::tokenizeCommand(const char* command, char** tokens, uint8_t& tokenCount) {
+  char* token;
+  char* commandCopy = strdup(command);
+
+  token = strtok(commandCopy, " ");
+  while (token != nullptr) {
+    tokens[tokenCount] = token;
+    tokenCount++;
+    token = strtok(nullptr, " ");
+  }
+
+  free(commandCopy);
 }
