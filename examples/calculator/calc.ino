@@ -16,14 +16,12 @@ void setup() {
   cli.addCommand("divide", divide);
   cli.addCommand("sqrt", squareRoot);
   cli.addCommand("power", power);
-  cli.addCommand("log", logarithm);
-
-  // Start sCLI
-  cli.loop();
+  cli.addCommand("log", logarithm); 
 }
 
 void loop() {
-  // Empty loop
+  // Start sCLI
+  cli.loop();
 }
 
 // Command Functions
