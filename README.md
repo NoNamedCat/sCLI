@@ -1,6 +1,6 @@
 ![logo-no-background](https://github.com/NoNamedCat/sCLI/assets/39467683/66eb4f94-9409-4cea-8a28-065e23f59527)
 
-# sCLI - Simple Command Line Interpreter Library for Arduino
+# sCLI - Simple Command Line Interpreter Library for Arduino 
 
 ![Version](https://img.shields.io/badge/version-1.0-blue.svg)
 ![License](https://img.shields.io/badge/license-MIT-green.svg)
