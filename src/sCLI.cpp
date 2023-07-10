@@ -5,6 +5,7 @@ sCLI::sCLI() {
   commandCount = 0;
   streamCount = 0;
   charCount = 0;
+  historyIndex = -1;
 }
 
 void sCLI::addCommand(const char* command, CommandFunction function) {
@@ -28,13 +29,13 @@ void sCLI::setPrompt(const char* newPrompt) {
 }
 
 void sCLI::loop() {
-    processInput();
+  processInput();
 }
 
 void sCLI::executeCommand() {
   size_t commandLength = strlen(commandBuffer);
 
-  // Verificar si el comando está vacío o consiste solo en espacios en blanco
+  // Check if the command is empty or consists only of whitespace
   bool isWhitespaceOnly = true;
   for (size_t i = 0; i < commandLength; i++) {
     if (!isspace(commandBuffer[i])) {
@@ -44,7 +45,7 @@ void sCLI::executeCommand() {
   }
 
   if (commandLength == 0 || isWhitespaceOnly) {
-    // El comando está vacío o consiste solo en espacios en blanco, ignorarlo
+    // The command is empty or consists only of whitespace, ignore it
     memset(commandBuffer, 0, sizeof(commandBuffer));
     charCount = 0;
     return;
@@ -52,8 +53,6 @@ void sCLI::executeCommand() {
 
   char* tokens[MAX_PARAM_COUNT];
   uint8_t tokenCount = 0;
-
-  
 
   tokenizeCommand(commandBuffer, tokens, tokenCount);
 
@@ -64,11 +63,18 @@ void sCLI::executeCommand() {
     }
   }
 
-  // Clear command buffer
+  // Add the current command to the history
+  commandHistory.push_front(commandBuffer);
+
+  // Clear the history if it exceeds a maximum limit
+  if (commandHistory.size() > MAX_COMMAND_HISTORY) {
+    commandHistory.pop_back();
+  }
+
+  // Clear the command buffer and reset the character count
   memset(commandBuffer, 0, sizeof(commandBuffer));
   charCount = 0;
 }
-
 
 void sCLI::processInput() {
   for (uint8_t i = 0; i < streamCount; i++) {
@@ -90,6 +96,16 @@ void sCLI::processInput() {
               if (streams[j] != nullptr) {
                 streams[j]->write("\b \b");
               }
+            }
+          }
+        } else if (input == '\e') {  // Escape character
+          input = stream->read();
+          if (input == '[') {
+            input = stream->read();
+            if (input == 'A') {  // Up arrow
+              navigateCommandHistory(-1);
+            } else if (input == 'B') {  // Down arrow
+              navigateCommandHistory(1);
             }
           }
         } else {
@@ -114,7 +130,7 @@ void sCLI::print(const char* message) {
   for (uint8_t i = 0; i < streamCount; i++) {
     if (streams[i] != nullptr) {
       streams[i]->print(message);
-      streams[i]->flush();   // Asegurarse de que los datos se envíen correctamente
+      streams[i]->flush();   // Make sure the data is sent correctly
     }
   }
 }
@@ -123,8 +139,8 @@ void sCLI::println(const char* message) {
   for (uint8_t i = 0; i < streamCount; i++) {
     if (streams[i] != nullptr) {
       streams[i]->print(message);
-      streams[i]->println(); // Agregar una nueva línea al final del mensaje
-      streams[i]->flush();   // Asegurarse de que los datos se envíen correctamente
+      streams[i]->println(); // Add a new line at the end of the message
+      streams[i]->flush();   // Make sure the data is sent correctly
     }
   }
 }
@@ -153,4 +169,49 @@ void sCLI::tokenizeCommand(const char* command, char** tokens, uint8_t& tokenCou
   }
 
   free(commandCopy);
+  tokenCount--;  // Adjust the count to exclude the main command
 }
+
+void sCLI::navigateCommandHistory(int direction) {
+  if (commandHistory.empty()) {
+    return;
+  }
+
+  // Update the history index
+  historyIndex += direction;
+
+  // Make sure the history index is within valid bounds
+  if (historyIndex < 0) {
+    historyIndex = 0;
+  } else if (historyIndex >= static_cast<int>(commandHistory.size())) {
+    historyIndex = commandHistory.size() - 1;
+  }
+
+  // Clear the current line
+  for (uint8_t i = 0; i < streamCount; i++) {
+    if (streams[i] != nullptr) {
+      streams[i]->write('\r');
+      for (uint8_t j = 0; j < MAX_COMMAND_LENGTH; j++) {
+        streams[i]->write(' ');
+      }
+      streams[i]->write('\r');
+    }
+  }
+
+  // Get the command from the history based on the index
+  String previousCommand = commandHistory[historyIndex];
+
+  // Update the command buffer and character count
+  strncpy(commandBuffer, previousCommand.c_str(), MAX_COMMAND_LENGTH - 1);
+  commandBuffer[MAX_COMMAND_LENGTH - 1] = '\0';
+  charCount = previousCommand.length();
+
+  // Show the command in the CLI
+  for (uint8_t i = 0; i < streamCount; i++) {
+    if (streams[i] != nullptr) {
+      streams[i]->print(prompt);
+      streams[i]->print(previousCommand);
+    }
+  }
+}
+
