@@ -17,6 +17,24 @@ void sCLI::addCommand(const char* command, CommandFunction function) {
   }
 }
 
+void sCLI::removeCommand(const char* command) {
+  for (uint8_t i = 0; i < commandCount; i++) {
+    if (strcmp(command, commandNames[i]) == 0) {
+      // Remove the command by shifting the remaining commands
+      for (uint8_t j = i; j < commandCount - 1; j++) {
+        commandNames[j] = commandNames[j + 1];
+        commandFunctions[j] = commandFunctions[j + 1];
+      }
+      commandCount--;
+      break;
+    }
+  }
+}
+
+void sCLI::removeAllCommands() {
+  commandCount = 0;
+}
+
 void sCLI::addStream(Stream& stream) {
   if (streamCount < MAX_COMMAND_LENGTH) {
     streams[streamCount] = &stream;
