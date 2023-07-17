@@ -6,7 +6,7 @@ sCLI::sCLI() {
   streamCount = 0;
   charCount = 0;
   historyIndex = -1;
-  commandNotFoundMessage = nullptr;  // Inicializar a nullptr
+  commandNotFoundMessage = nullptr;  
 }
 
 void sCLI::addCommand(const char* command, CommandFunction function) {
