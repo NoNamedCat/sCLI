@@ -6,6 +6,7 @@ sCLI::sCLI() {
   streamCount = 0;
   charCount = 0;
   historyIndex = -1;
+  commandNotFoundMessage = nullptr;  // Inicializar a nullptr
 }
 
 void sCLI::addCommand(const char* command, CommandFunction function) {
@@ -26,6 +27,10 @@ void sCLI::addStream(Stream& stream) {
 void sCLI::setPrompt(const char* newPrompt) {
   prompt = newPrompt;
   printPrompt();
+}
+
+void sCLI::setCommandNotFound(const char* message) {
+  commandNotFoundMessage = message;
 }
 
 void sCLI::loop() {
@@ -56,24 +61,46 @@ void sCLI::executeCommand() {
 
   tokenizeCommand(commandBuffer, tokens, tokenCount);
 
+  bool commandFound = false;  // Track if the command is found
+
   for (uint8_t i = 0; i < commandCount; i++) {
     if (strcmp(tokens[0], commandNames[i]) == 0) {
       commandFunctions[i]((const char**)tokens, tokenCount);
+      commandFound = true;  // Set commandFound to true
       break;
     }
   }
 
-  // Add the current command to the history
-  commandHistory.push_front(commandBuffer);
+  if (!commandFound && commandNotFoundMessage != nullptr) {
+    // Command not found, print the custom message
+    println(commandNotFoundMessage);
+  }
 
-  // Clear the history if it exceeds a maximum limit
-  if (commandHistory.size() > MAX_COMMAND_HISTORY) {
-    commandHistory.pop_back();
+  // Check if the command already exists in the history
+  bool commandExists = false;
+  for (const String& historyCommand : commandHistory) {
+    if (historyCommand.equals(commandBuffer)) {
+      commandExists = true;
+      break;
+    }
+  }
+
+  if (!commandExists) {
+    // Add the current command to the history
+    commandHistory.push_front(commandBuffer);
+
+    // Clear the history if it exceeds a maximum limit
+    if (commandHistory.size() > MAX_COMMAND_HISTORY) {
+      commandHistory.pop_back();
+    }
   }
 
   // Clear the command buffer and reset the character count
   memset(commandBuffer, 0, sizeof(commandBuffer));
   charCount = 0;
+
+  // Reset the history index to -1
+  historyIndex = -1;
 }
 
 void sCLI::processInput() {
@@ -102,10 +129,10 @@ void sCLI::processInput() {
           input = stream->read();
           if (input == '[') {
             input = stream->read();
-            if (input == 'A') {  // Up arrow
-              navigateCommandHistory(-1);
-            } else if (input == 'B') {  // Down arrow
-              navigateCommandHistory(1);
+            if (input == 'B') {  // Down arrow (previously Up arrow)
+              navigateCommandHistory(1);  // Changed direction
+            } else if (input == 'A') {  // Up arrow (previously Down arrow)
+              navigateCommandHistory(-1);  // Changed direction
             }
           }
         } else {
@@ -157,6 +184,16 @@ void sCLI::printNumber(float number, uint8_t decimalPlaces) {
   print(buffer);
 }
 
+void sCLI::printf(const char* format, ...) {
+  char buffer[MAX_COMMAND_LENGTH];
+  va_list args;
+  va_start(args, format);
+  vsnprintf(buffer, sizeof(buffer), format, args);
+  va_end(args);
+
+  print(buffer);
+}
+
 void sCLI::tokenizeCommand(const char* command, char** tokens, uint8_t& tokenCount) {
   char* token;
   char* commandCopy = strdup(command);
@@ -178,13 +215,13 @@ void sCLI::navigateCommandHistory(int direction) {
   }
 
   // Update the history index
-  historyIndex += direction;
+  historyIndex -= direction;  // Inverted direction
 
   // Make sure the history index is within valid bounds
-  if (historyIndex < 0) {
-    historyIndex = 0;
-  } else if (historyIndex >= static_cast<int>(commandHistory.size())) {
-    historyIndex = commandHistory.size() - 1;
+  if (historyIndex < -1) {  // Adjusted condition
+    historyIndex = -1;  // Changed value
+  } else if (historyIndex >= static_cast<int>(commandHistory.size() - 1)) {  // Adjusted condition
+    historyIndex = commandHistory.size() - 1;  // Changed value
   }
 
   // Clear the current line
@@ -199,7 +236,10 @@ void sCLI::navigateCommandHistory(int direction) {
   }
 
   // Get the command from the history based on the index
-  String previousCommand = commandHistory[historyIndex];
+  String previousCommand;
+  if (historyIndex >= 0) {
+    previousCommand = commandHistory[historyIndex];
+  }
 
   // Update the command buffer and character count
   strncpy(commandBuffer, previousCommand.c_str(), MAX_COMMAND_LENGTH - 1);
