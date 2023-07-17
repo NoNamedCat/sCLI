@@ -16,6 +16,8 @@ public:
   sCLI();
 
   void addCommand(const char* command, CommandFunction function);
+  void removeCommand(const char* command);  // New function
+  void removeAllCommands();  // New function
   void addStream(Stream& stream);
   void setPrompt(const char* newPrompt);
   void setCommandNotFound(const char* message);
@@ -43,7 +45,7 @@ private:
   uint8_t charCount;
   std::deque<String> commandHistory;
   int historyIndex;
-  const char* commandNotFoundMessage; 
+  const char* commandNotFoundMessage;
 };
 
 #endif
